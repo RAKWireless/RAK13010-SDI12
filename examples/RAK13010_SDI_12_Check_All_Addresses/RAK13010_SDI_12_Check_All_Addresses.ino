@@ -129,7 +129,7 @@ void setup()
 
   Serial.println("End Search for SDI-12 Devices.");
 
-  digitalWrite(POWER_PIN, LOW); // Cut power.
+  digitalWrite(WB_IO2, LOW); // Cut power.
 }
 
 void loop() 
