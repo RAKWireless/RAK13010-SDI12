@@ -1,0 +1,32 @@
+{
+	"name": "RAKwireless RGB Matrix library",
+	"version": "1.0.0",
+	"keywords": [
+		"RGB",
+		"WS2812B",
+		"RAKWireless",
+		"WisBlock",
+		"RAK14012"
+	],
+	"description": "RAKWireless library for the RAK14012 module with WS2812B",
+	"frameworks": [
+		"arduino"
+	],
+	"platforms": [
+		"*"
+	],
+	"license": "GNU",
+	"authors": [
+		{
+			"email": "nero.du@rakwireless.com",
+			"url": "https://rakwireless.com",
+			"maintainer": true,
+			"name": "Nero"
+		}
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/RAKWireless/RAKwireless_RGB_Matrix_library"
+	},
+	"homepage": "https://rakwireless.com"
+}
