@@ -8,7 +8,7 @@ RAK13010-SDI12 is a library written based on EnviroDIY Arduino-SDI-12, adding su
 [SDI-12](http://www.sdi-12.org/) is an asynchronous, ASCII, serial communications protocol that was developed for intelligent sensory instruments that typically monitor environmental data.
 [Advantages of SDI-12](http://en.wikipedia.org/wiki/SDI-12) include the ability to use a single available data channel for many sensors.
 
-[*RAKWireless <RAK#> <function>*](https://store.RAKWireless.com/products/RAK13010-SDI12)
+[*RAKWireless RAK13010 SDI-12*](https://store.RAKWireless.com/products/RAK13010-SDI12)
 
 # Documentation
 

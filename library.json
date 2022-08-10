@@ -1,14 +1,13 @@
 {
-	"name": "RAKwireless RGB Matrix library",
+	"name": "RAKwireless_SDI-12",
 	"version": "1.0.0",
 	"keywords": [
-		"RGB",
-		"WS2812B",
+		"SDI-12",
 		"RAKWireless",
 		"WisBlock",
-		"RAK14012"
+		"RAK13010"
 	],
-	"description": "RAKWireless library for the RAK14012 module with WS2812B",
+	"description": "RAKWireless library for RAK13010 SDI-12 module",
 	"frameworks": [
 		"arduino"
 	],
@@ -26,7 +25,7 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/RAKWireless/RAKwireless_RGB_Matrix_library"
+		"url": "https://github.com/RAKWireless/RAK13010-SDI12"
 	},
 	"homepage": "https://rakwireless.com"
 }
