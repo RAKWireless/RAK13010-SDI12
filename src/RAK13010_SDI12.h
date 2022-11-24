@@ -13,10 +13,14 @@
 
 #include "SDI12.h"
 
+#if defined(RAK4630)
+	#include "Adafruit_TinyUSB.h"
+#endif 
+
 class RAK_SDI12 : public SDI12
 {
   public:
-  RAK_SDI12(int8_t dataPin) : SDI12(dataPin){};
+  RAK_SDI12(int8_t dataPinRX  , int8_t dataPinTX , int8_t OE) : SDI12(dataPinRX,dataPinTX,OE){};
   RAK_SDI12(void) : SDI12(){};
   ~RAK_SDI12(){};
 };

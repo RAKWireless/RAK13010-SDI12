@@ -37,15 +37,11 @@ In PlatformIO this is usually <user/.platformio/lib>
 
 This library provides the RAK_SDI12 class, which can be used to communicate with sensors interfaced with SDI-12. These examples show how to use RAK13010.
 
-- [RAK13010_SDI_12_Address_Change](./examples/RAK13010_SDI_12_Address_Change) Changing the Address of your SDI-12 Sensor. It discovers the address of the attached sensor and allows you to change it.
-
 - [RAK13010_SDI_12_Basic_Data_Request](./examples/RAK13010_SDI_12_Basic_Data_Request) Basic Data Request to a Single Sensor. This is a very basic (stripped down) example where the user initiates a measurement and receives the results to a terminal window without typing numerous commands into the terminal.
 
-- [RAK13010_SDI_12_Check_All_Addresses](./examples/RAK13010_SDI_12_Check_All_Addresses) Check all Addresses for Active Sensors and Print Status. It discovers the address of all sensors active and attached to the board. Each sensor should have a unique address already - if not, multiple sensors may respond simultaenously to the same request and the output will not be readable by the Arduino.
+- [RAK13010_SDI_12_Interface](./examples/RAK13010_SDI_12_Interface)  Arduino based USB serial communication from PC to SDI-12 (electrical and timing).
 
-- [RAK13010_SDI_12_Concurrent_Logger](./examples/RAK13010_SDI_12_Concurrent_Logger) Concurrent Measurements. Finding all attached sensors and logging data from them. Example waits for each sensor to complete a measurement, this asks all sensors to take measurements concurrently and then waits until each is finished to query for results. This can be much faster than waiting for each sensor when you have multiple sensor attached.
-
-- [RAK13010_SDI_12_Interface](./examples/RAK13010_SDI_12_Interface)  Arduino-based USB dongle translates serial comm from PC to SDI-12 (electrical and timing)
+- [RAK13010_SDI_12_Slave](./examples/RAK13010_SDI_12_Slave)  Arduino based USB serial communication as SDI-12 slave.
 
   1. Allows user to communicate to SDI-12 devices from a serial terminal emulator (e.g. PuTTY).
 
@@ -71,18 +67,20 @@ This is called to begin the functionality of the SDI-12 object.  It sets the obj
 | --------- | ---- | -------- |
 | return    |      | none     |
 
-**void begin(int8_t dataPin)**
+**void begin(int8_t dataPinRX , int8_t dataPinTX , int8_t txOE);**
 
-Set the SDI12::_datapin and begin the SDI-12 object.
+Set the SDI12::\_dataPinRX , SDI12::\_dataPinTX , SDI12::\_txOE and begin the SDI-12 object.
 
 If the SDI-12 instance is created using the empty constuctor, this must be used to set the data pin.
 
 #### Parameters:
 
-| Direction | Name    | Function                           |
-| --------- | ------- | ---------------------------------- |
-| in        | dataPin | The data pin's digital pin number. |
-| return    |         | none                               |
+| Direction | Name      | Function                                                 |
+| --------- | --------- | -------------------------------------------------------- |
+| in        | dataPinRX | The digital pin number of the receive data pin.          |
+| in        | dataPinTX | The digital pin number of the transmit data pin.         |
+| in        | txOE      | Enables the digital pin number of the transmit data pin. |
+| return    |           | none                                                     |
 
 **void end()**
 
@@ -96,15 +94,17 @@ Set the SDI-12 state to disabled, set the pointer to the current active instance
 | --------- | ---- | -------- |
 | return    |      | none     |
 
-**void setDataPin(int8_t dataPin)**
+**void setDataPin(int8_t dataPinRX , int8_t dataPinTX)**
 
 Set the data pin for the current SDI-12 instance.
 
 #### Parameters:
 
-| Direction | Name | Function                           |
-| --------- | ---- | ---------------------------------- |
-| return    |      | The data pin's digital pin number. |
+| Direction | Name      | Function                                         |
+| --------- | --------- | ------------------------------------------------ |
+| in        | dataPinRX | The digital pin number of the receive data pin.  |
+| in        | dataPinTX | The digital pin number of the transmit data pin. |
+| return    |           | The data pin's digital pin number.               |
 
 **int8_t getDataPin()**
 

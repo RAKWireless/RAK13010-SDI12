@@ -137,6 +137,9 @@
   
 #endif
 
+#ifndef ARDUINO_NRF52_ADAFRUIT
+	#define ARDUINO_NRF52_ADAFRUIT
+#endif
 
 
 /// Helper for strings stored in flash
@@ -170,6 +173,7 @@ typedef const __FlashStringHelper* FlashString;
 #endif
 
 #if defined(ESP32) || defined(ESP8266)
+
 /**
  * @brief This enumeration provides the lookahead options for parseInt(), parseFloat().
  *
@@ -200,7 +204,31 @@ enum LookaheadMode {
  */
 #define READTIME sdi12timer.SDI12TimerRead()
 
-#elif defined(NRF52840_XXAA) || defined(ARDUINO_ARCH_RP2040)
+#elif defined(ARDUINO_ARCH_RP2040)
+
+#define READTIME sdi12timer.SDI12TimerRead()
+
+#elif defined(NRF52840_XXAA)
+
+#ifndef RAK4630 // For RUI.
+/**
+ * @brief This enumeration provides the lookahead options for parseInt(), parseFloat().
+ *
+ * The rules set out here are used until either the first valid character is found or a
+ * time out occurs due to lack of input.
+ *
+ * This enum is part of the Stream parent class, but is missing from the RUI BSP.
+ */
+enum LookaheadMode {
+  /** All invalid characters are ignored. */
+  SKIP_ALL,
+  /** Nothing is skipped, and the stream is not touched unless the first waiting
+     character is valid. */
+  SKIP_NONE,
+  /** Only tabs, spaces, line feeds & carriage returns are skipped.*/
+  SKIP_WHITESPACE
+};
+#endif
 
 #define READTIME sdi12timer.SDI12TimerRead()
 
@@ -508,6 +536,8 @@ class SDI12 : public Stream {
   float parseFloat(LookaheadMode lookahead = SKIP_ALL, char ignore = NO_IGNORE_CHAR);
 
  protected:
+ 
+	int timedPeek();
   /**
    * @brief Return the next numeric digit in the stream or -1 if timeout
    *
@@ -532,7 +562,9 @@ class SDI12 : public Stream {
   /**
    * @brief reference to the data pin
    */
-  int8_t _dataPin;
+  int8_t _dataPinRX;
+  int8_t _dataPinTX;
+  int8_t _txOE;
 
  public:
   /**
@@ -553,7 +585,7 @@ class SDI12 : public Stream {
    * When the constructor is called it resets the buffer overflow status to FALSE and
    * assigns the pin number "dataPin" to the private variable "_dataPin".
    */
-  explicit SDI12(int8_t dataPin);
+  explicit SDI12(int8_t dataPinRX,int8_t dataPinTX,int8_t txOE);
 
   /**
    * @brief Destroy the SDI12 object.
@@ -584,7 +616,7 @@ class SDI12 : public Stream {
    *
    * @param dataPin The data pin's digital pin number
    */
-  void begin(int8_t dataPin);
+  void begin(int8_t dataPinRX , int8_t dataPinTX , int8_t txOE);
   /**
    * @brief Disable the SDI-12 object (but do not destroy it).
    *
@@ -633,7 +665,7 @@ class SDI12 : public Stream {
    *
    * @param dataPin  The data pin's digital pin number
    */
-  void setDataPin(int8_t dataPin);
+  void setDataPin(int8_t dataPinRX , int8_t dataPinTX);
   /**@}*/
 
 

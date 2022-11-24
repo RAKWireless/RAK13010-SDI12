@@ -124,6 +124,20 @@ int SDI12::read() {
   return nextChar;                                             // return the char
 }
 
+// Add for RUI.
+int SDI12::timedPeek()
+{
+	unsigned long startMillis;  // used for timeout measurement
+  int c;
+  startMillis = millis();
+  do {
+    c = peek();
+    if (c >= 0) return c;
+    yield(); // running TinyUSB task
+  } while(millis() - startMillis < 150);
+  return -1;     // -1 indicates timeout
+}
+
 // these functions hide the stream equivalents to return a custom timeout value
 int SDI12::peekNextDigit(LookaheadMode lookahead, bool detectDecimal) {
   int c;
@@ -211,7 +225,8 @@ float SDI12::parseFloat(LookaheadMode lookahead, char ignore) {
 /* ================ Constructor, Destructor, begin(), end(), and timeout ============*/
 // Constructor
 SDI12::SDI12() {
-  _dataPin        = -1;
+  _dataPinRX        = -1;
+  _dataPinTX        = -1;
   _bufferOverflow = false;
   // SDI-12 protocol says sensors must respond within 15 milliseconds
   // We'll bump that up to 150, just for good measure, but we don't want to
@@ -224,8 +239,11 @@ SDI12::SDI12() {
   // in-site environmental sensors.
   setTimeoutValue(-9999);
 }
-SDI12::SDI12(int8_t dataPin) {
-  _dataPin        = dataPin;
+SDI12::SDI12(int8_t dataPinRX , int8_t dataPinTX , int8_t txOE) 
+{
+  _dataPinRX  = dataPinRX;
+  _dataPinTX  = dataPinTX;
+  _txOE = txOE;
   _bufferOverflow = false;
   // SDI-12 protocol says sensors must respond within 15 milliseconds
   // We'll bump that up to 150, just for good measure, but we don't want to
@@ -256,16 +274,23 @@ void SDI12::begin() {
   // This function is defined in SDI12_boards.h
   sdi12timer.configSDI12TimerPrescale();
 #if defined(NRF52840_XXAA)
-  dwt_enable();
+  //dwt_enable(); // Modified for RUI.
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk; /* Global Enable for DWT */
+  DWT->CYCCNT = 0;                                /* Reset the counter */
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;            /* Enable cycle counter */
 #endif
 }
-void SDI12::begin(int8_t dataPin) {
-  _dataPin = dataPin;
+void SDI12::begin(int8_t dataPinRX,int8_t dataPinTX,int8_t txOE) 
+{
+  _dataPinRX = dataPinRX;
+  _dataPinTX = dataPinTX;
+  _txOE = txOE;
   begin();
 }
 
 // End
-void SDI12::end() {
+void SDI12::end() 
+{
   setState(SDI12_DISABLED);
   _activeObject = NULL;
   // Set the timer prescalers back to original values
@@ -279,20 +304,25 @@ void SDI12::setTimeoutValue(int16_t value) {
 }
 
 // Set the data pin for the SDI-12 instance
-void SDI12::setDataPin(int8_t dataPin) {
-  _dataPin = dataPin;
+void SDI12::setDataPin(int8_t dataPinRX,int8_t dataPinTX) 
+{
+  _dataPinRX = dataPinRX;
+  _dataPinTX = dataPinTX;
 }
 
 // Return the data pin for the SDI-12 instance
-int8_t SDI12::getDataPin() {
-  return _dataPin;
+int8_t SDI12::getDataPin() 
+{
+  return _dataPinRX; // TODO return TX pin;
 }
 
 
 /* ================ Using more than one SDI-12 object ===============================*/
 // a method for setting the current object as the active object
-bool SDI12::setActive() {
-  if (_activeObject != this) {
+bool SDI12::setActive() 
+{
+  if (_activeObject != this) 
+  {
     setState(SDI12_HOLDING);
     _activeObject = this;
     return true;
@@ -301,7 +331,8 @@ bool SDI12::setActive() {
 }
 
 // a method for checking if this object is the active object
-bool SDI12::isActive() {
+bool SDI12::isActive() 
+{
   return this == _activeObject;
 }
 
@@ -314,9 +345,11 @@ bool SDI12::isActive() {
 #else
 // Added MJB: parity function to replace the one specific for AVR from util/parity.h
 // http://graphics.stanford.edu/~seander/bithacks.html#ParityNaive
-uint8_t SDI12::parity_even_bit(uint8_t v) {
+uint8_t SDI12::parity_even_bit(uint8_t v) 
+{
   uint8_t parity = 0;
-  while (v) {
+  while (v) 
+  {
     parity = !parity;
     v      = v & (v - 1);
   }
@@ -325,69 +358,70 @@ uint8_t SDI12::parity_even_bit(uint8_t v) {
 #endif
 
 // a helper function to switch pin interrupts on or off
-void SDI12::setPinInterrupts(bool enable) {
+void SDI12::setPinInterrupts(bool enable) 
+{
 #if defined(ARDUINO_ARCH_SAMD) || defined(ESP32) || defined(ESP8266) || defined(NRF52840_XXAA)
   // Merely need to attach the interrupt function to the pin
   if (enable) 
   {
     LIB_LOG("attachInterrupt");
-    attachInterrupt(digitalPinToInterrupt(_dataPin), handleInterrupt, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(_dataPinRX), handleInterrupt, CHANGE);
     LIB_LOG("attachInterrupt");
     // Merely need to detach the interrupt function from the pin
   }
   else
   {
-    detachInterrupt(digitalPinToInterrupt(_dataPin));
+    detachInterrupt(digitalPinToInterrupt(_dataPinRX));
   }
 #elif defined(ARDUINO_ARCH_RP2040)
   PinStatus mode =  CHANGE;
   if (enable) 
   {
     LIB_LOG(" ");
-    mbed::InterruptIn* irq = new mbed::InterruptIn(digitalPinToPinName(_dataPin));
+    mbed::InterruptIn* irq = new mbed::InterruptIn(digitalPinToPinName(_dataPinRX));
     LIB_LOG(" ");
     
     irq->rise( mbed::callback((voidFuncPtrParam)handleInterrupt, (void*)NULL) );
     irq->fall( mbed::callback((voidFuncPtrParam)handleInterrupt, (void*)NULL) );
 
-    digitalPinToInterruptObj(_dataPin) = irq;
+    digitalPinToInterruptObj(_dataPinRX) = irq;
     // Give a default pullup for the pin, since calling InterruptIn with PinMode is impossible.
-    if (digitalPinToGpio(_dataPin) == NULL) 
+    if (digitalPinToGpio(_dataPinRX) == NULL) 
     {
       if (mode == FALLING) 
       {
-        pinMode(_dataPin, INPUT_PULLUP);
+        pinMode(_dataPinRX, INPUT_PULLUP);
       } 
       else if (mode == RISING) 
       {
-        pinMode(_dataPin, INPUT_PULLDOWN);
+        pinMode(_dataPinRX, INPUT_PULLDOWN);
       } 
       else 
       {
-        pinMode(_dataPin, INPUT);
+        pinMode(_dataPinRX, INPUT);
       }
     }
   }
   else
   {
-    detachInterrupt(digitalPinToInterrupt(_dataPin));
+    detachInterrupt(digitalPinToInterrupt(_dataPinRX));
   }
 
 #elif defined(__AVR__) && not defined(SDI12_EXTERNAL_PCINT)
   if (enable) {
     // Enable interrupts on the register with the pin of interest
-    *digitalPinToPCICR(_dataPin) |= (1 << digitalPinToPCICRbit(_dataPin));
+    *digitalPinToPCICR(_dataPinRX) |= (1 << digitalPinToPCICRbit(_dataPinRX));
     // Enable interrupts on the specific pin of interest
     // The interrupt function is actually attached to the interrupt way down in
     // section 7.5
-    *digitalPinToPCMSK(_dataPin) |= (1 << digitalPinToPCMSKbit(_dataPin));
+    *digitalPinToPCMSK(_dataPinRX) |= (1 << digitalPinToPCMSKbit(_dataPinRX));
   } else {
     // Disable interrupts on the specific pin of interest
-    *digitalPinToPCMSK(_dataPin) &= ~(1 << digitalPinToPCMSKbit(_dataPin));
-    if (!*digitalPinToPCMSK(_dataPin)) {
+    *digitalPinToPCMSK(_dataPinRX) &= ~(1 << digitalPinToPCMSKbit(_dataPinRX));
+    if (!*digitalPinToPCMSK(_dataPinRX)) {
       // If there are no other pins on the register left with enabled interrupts,
       // disable the whole register
-      *digitalPinToPCICR(_dataPin) &= ~(1 << digitalPinToPCICRbit(_dataPin));
+      *digitalPinToPCICR(_dataPinRX) &= ~(1 << digitalPinToPCICRbit(_dataPinRX));
     }
     // We don't detach the function from the interrupt for AVR processors
   }
@@ -401,69 +435,153 @@ void SDI12::setPinInterrupts(bool enable) {
 }
 
 // sets the state of the SDI-12 object.
-void SDI12::setState(SDI12_STATES state) {
-  switch (state) {
-    case SDI12_HOLDING: {
-      pinMode(_dataPin, INPUT);     // Turn off the pull-up resistor
-      pinMode(_dataPin, OUTPUT);    // Pin mode = output
-      digitalWrite(_dataPin, LOW);  // Pin state = low - marking
+/** SDI-12 is disabled, pin mode INPUT, interrupts disabled for the pin */
+//SDI12_DISABLED,
+/** SDI-12 is enabled, pin mode INPUT, interrupts disabled for the pin */
+//SDI12_ENABLED,
+/** The line is being held LOW, pin mode OUTPUT, interrupts disabled for the pin */
+//SDI12_HOLDING,
+/** Data is being transmitted by the SDI-12 master, pin mode OUTPUT, interrupts
+   disabled for the pin */
+//SDI12_TRANSMITTING,
+/** The SDI-12 master is listening for a response from the slave, pin mode INPUT,
+   interrupts enabled for the pin */
+//SDI12_LISTENING
+
+void SDI12::setState(SDI12_STATES state) 
+{
+  
+  switch (state) 
+  {
+    case SDI12_HOLDING: 
+    {
+//      pinMode(_dataPin, INPUT);     // Turn off the pull-up resistor
+//      pinMode(_dataPin, OUTPUT);    // Pin mode = output
+//      digitalWrite(_dataPin, LOW);  // Pin state = low - marking
+//      setPinInterrupts(false);      // Interrupts disabled on data pin
+      pinMode(_dataPinRX, INPUT);     // Turn off the pull-up resistor
+      //pinMode(_dataPinRX, OUTPUT);    // Pin mode = output
+      //digitalWrite(_dataPinRX, HIGH);   // Pin state = HIGH - marking
+      setPinInterrupts(false);        // Interrupts disabled on data pin
+      
+      //pinMode(_dataPinTX, INPUT);     // Turn off the pull-up resistor
+      pinMode(_dataPinTX, OUTPUT);    // Pin mode = output
+      digitalWrite(_dataPinTX, LOW);   // Pin state = HIGH - marking
+
+      pinMode(_txOE, OUTPUT);           // Pin mode = input, pull-up resistor off
+      digitalWrite(_txOE, HIGH);        // Pin state = low (turns off pull-up)
+      break;
+    }
+    case SDI12_TRANSMITTING: 
+    {
+//      pinMode(_dataPin, INPUT);   // Turn off the pull-up resistor
+//      pinMode(_dataPin, OUTPUT);  // Pin mode = output
+//      setPinInterrupts(false);    // Interrupts disabled on data pin
+//      break;
+
+//      pinMode(_dataPinTX, INPUT);   // Turn off the pull-up resistor
+      pinMode(_dataPinTX, OUTPUT);  // Pin mode = output
+
+      pinMode(_dataPinRX, INPUT);   // Turn off the pull-up resistor
       setPinInterrupts(false);      // Interrupts disabled on data pin
+
+      pinMode(_txOE, OUTPUT);           // Pin mode = input, pull-up resistor off
+      digitalWrite(_txOE, LOW);        // Pin state = low (turns off pull-up)
+
       break;
     }
-    case SDI12_TRANSMITTING: {
-      pinMode(_dataPin, INPUT);   // Turn off the pull-up resistor
-      pinMode(_dataPin, OUTPUT);  // Pin mode = output
-      setPinInterrupts(false);    // Interrupts disabled on data pin
-      break;
-    }
-    case SDI12_LISTENING: {
-      digitalWrite(_dataPin, LOW);  // Pin state = low (turns off pull-up)
-      pinMode(_dataPin, INPUT);     // Pin mode = input, pull-up resistor off
+    case SDI12_LISTENING: 
+    {
+//      digitalWrite(_dataPin, LOW);  // Pin state = low (turns off pull-up)
+//      pinMode(_dataPin, INPUT);     // Pin mode = input, pull-up resistor off
+//      
+//#if defined(ESP32) || defined(ESP8266)
+//      interrupts();  // Re-enable universal interrupts as soon as critical timing is past
+//#endif
+//      setPinInterrupts(true);       // Enable Rx interrupts on data pin
+//      rxState = WAITING_FOR_START_BIT;
+//      break;
+//      digitalWrite(_dataPinRX, HIGH);   // Pin state = low (turns off pull-up)
+      pinMode(_dataPinRX, INPUT);       // Pin mode = input, pull-up resistor off
       
 #if defined(ESP32) || defined(ESP8266)
       interrupts();  // Re-enable universal interrupts as soon as critical timing is past
 #endif
       setPinInterrupts(true);       // Enable Rx interrupts on data pin
       rxState = WAITING_FOR_START_BIT;
+      
+      //digitalWrite(_dataPinTX, HIGH);   // Pin state = low (turns off pull-up)
+      pinMode(_dataPinTX, INPUT);       // Pin mode = input, pull-up resistor off
+
+      pinMode(_txOE, OUTPUT);           // Pin mode = input, pull-up resistor off
+      digitalWrite(_txOE, HIGH);        // Pin state = low (turns off pull-up)
       break;
+
     }
     default:  // SDI12_DISABLED or SDI12_ENABLED
     {
-      digitalWrite(_dataPin, LOW);  // Pin state = low (turns off pull-up)
-      pinMode(_dataPin, INPUT);     // Pin mode = input, pull-up resistor off
+//      digitalWrite(_dataPin, LOW);  // Pin state = low (turns off pull-up)
+//      pinMode(_dataPin, INPUT);     // Pin mode = input, pull-up resistor off
+//      setPinInterrupts(false);      // Interrupts disabled on data pin
+//      break;
+      digitalWrite(_dataPinRX, HIGH);  // Pin state = low (turns off pull-up)
+      pinMode(_dataPinRX, INPUT);     // Pin mode = input, pull-up resistor off
       setPinInterrupts(false);      // Interrupts disabled on data pin
+
+   //   digitalWrite(_dataPinTX, HIGH);  // Pin state = low (turns off pull-up)
+   //   pinMode(_dataPinTX, INPUT_PULLUP);     // Pin mode = input, pull-up resistor off
+
+      pinMode(_dataPinTX, OUTPUT);    // Pin mode = output
+      digitalWrite(_dataPinTX, LOW);   // Pin state = HIGH - marking
+
+      pinMode(_txOE, OUTPUT);           // Pin mode = input, pull-up resistor off
+      digitalWrite(_txOE, HIGH);        // Pin state = low (turns off pull-up)
       break;
     }
   }
 }
 
 // forces a SDI12_HOLDING state.
-void SDI12::forceHold() {
+void SDI12::forceHold()
+{
   setState(SDI12_HOLDING);
 }
 
 // forces a SDI12_LISTENING state.
-void SDI12::forceListen() {
+void SDI12::forceListen() 
+{
   setState(SDI12_LISTENING);
 }
 
 
 /* ================ Waking Up and Talking To Sensors ================================*/
 // this function wakes up the entire sensor bus
-void SDI12::wakeSensors(int8_t extraWakeTime) {
+void SDI12::wakeSensors(int8_t extraWakeTime)
+{
+//  setState(SDI12_TRANSMITTING);
+//  // Universal interrupts can be on while the break and marking happen because
+//  // timings for break and from the recorder are not critical.
+//  // Interrupts on the pin are disabled for the entire transmitting state
+//  digitalWrite(_dataPin, HIGH);         // break is HIGH
+//  delayMicroseconds(lineBreak_micros);  // Required break of 12 milliseconds (12,000 µs)
+//  delay(extraWakeTime);                 // allow the sensors to wake
+//  digitalWrite(_dataPin, LOW);          // marking is LOW
+//  delayMicroseconds(marking_micros);  // Required marking of 8.33 milliseconds(8,333 µs)
+
   setState(SDI12_TRANSMITTING);
   // Universal interrupts can be on while the break and marking happen because
   // timings for break and from the recorder are not critical.
   // Interrupts on the pin are disabled for the entire transmitting state
-  digitalWrite(_dataPin, HIGH);         // break is HIGH
-  delayMicroseconds(lineBreak_micros);  // Required break of 12 milliseconds (12,000 µs)
-  delay(extraWakeTime);                 // allow the sensors to wake
-  digitalWrite(_dataPin, LOW);          // marking is LOW
-  delayMicroseconds(marking_micros);  // Required marking of 8.33 milliseconds(8,333 µs)
+  digitalWrite(_dataPinTX, HIGH);          // break is HIGH
+  delayMicroseconds(lineBreak_micros);    // Required break of 12 milliseconds (12,000 µs)
+  delay(extraWakeTime);                   // allow the sensors to wake
+  digitalWrite(_dataPinTX, LOW);         // marking is LOW
+  delayMicroseconds(marking_micros);      // Required marking of 8.33 milliseconds(8,333 µs)
 }
 
 // this function writes a character out on the data line
-void SDI12::writeChar(uint8_t outChar) {
+void SDI12::writeChar(uint8_t outChar) 
+{
   uint8_t currentTxBitNum = 0;  // first bit is start bit
   uint8_t bitValue        = 1;  // start bit is HIGH (inverse parity...)
   
@@ -473,10 +591,15 @@ void SDI12::writeChar(uint8_t outChar) {
 
   sdi12timer_t t0 = READTIME;  // start time
 
+//  digitalWrite(
+//    _dataPin,
+//    HIGH);  // immediately get going on the start bit
+//            // this gives us 833µs to calculate parity and position of last high bit
   digitalWrite(
-    _dataPin,
+    _dataPinTX,
     HIGH);  // immediately get going on the start bit
             // this gives us 833µs to calculate parity and position of last high bit
+
   currentTxBitNum++;
 
   uint8_t parityBit = parity_even_bit(outChar);  // Calculate the parity bit
@@ -502,10 +625,16 @@ void SDI12::writeChar(uint8_t outChar) {
   // repeat for all data bits until the last bit different from marking
   while (currentTxBitNum++ < lastHighBit) {
     bitValue = outChar & 0x01;  // get next bit in the character to send
-    if (bitValue) {
-      digitalWrite(_dataPin, LOW);  // set the pin state to LOW for 1's
-    } else {
-      digitalWrite(_dataPin, HIGH);  // set the pin state to HIGH for 0's
+    if (bitValue) 
+    {
+//      digitalWrite(_dataPin, LOW);  // set the pin state to LOW for 1's
+      digitalWrite(_dataPinTX, LOW);  // set the pin state to LOW for 1's
+
+    } 
+    else 
+    {
+//      digitalWrite(_dataPin, HIGH);  // set the pin state to HIGH for 0's
+      digitalWrite(_dataPinTX, HIGH);  // set the pin state to HIGH for 0's
     }
     // Hold the line for this bit duration
     while ((uint8_t)(READTIME - t0) < txBitWidth) {}
@@ -515,7 +644,9 @@ void SDI12::writeChar(uint8_t outChar) {
   }
 
   // Set the line low for the all remaining 1's and the stop bit
-  digitalWrite(_dataPin, LOW);
+//  digitalWrite(_dataPin, LOW);
+  digitalWrite(_dataPinTX, LOW);
+
 
 #if defined(ESP32) || defined(ESP8266)
   interrupts();  // Re-enable universal interrupts as soon as critical timing is past
@@ -566,9 +697,11 @@ void SDI12::sendCommand(FlashString cmd, int8_t extraWakeTime) {
 // marking and then sending out the characters of resp one by one (for slave-side use,
 // that is, when the Arduino itself is acting as an SDI-12 device rather than a
 // recorder).
-void SDI12::sendResponse(String& resp) {
+void SDI12::sendResponse(String& resp) 
+{
   setState(SDI12_TRANSMITTING);       // Get ready to send data to the recorder
-  digitalWrite(_dataPin, LOW);        // marking is LOW
+//  digitalWrite(_dataPin, LOW);        // marking is LOW
+  digitalWrite(_dataPinRX, HIGH);        // marking is LOW
   delayMicroseconds(marking_micros);  // 8.33 ms marking before response
   for (int unsigned i = 0; i < resp.length(); i++) {
     writeChar(resp[i]);  // write each character
@@ -576,9 +709,11 @@ void SDI12::sendResponse(String& resp) {
   setState(SDI12_LISTENING);  // return to listening state
 }
 
-void SDI12::sendResponse(const char* resp) {
+void SDI12::sendResponse(const char* resp) 
+{
   setState(SDI12_TRANSMITTING);       // Get ready to send data to the recorder
-  digitalWrite(_dataPin, LOW);        // marking is LOW
+//  digitalWrite(_dataPin, LOW);        // marking is LOW
+  digitalWrite(_dataPinRX, HIGH);        // marking is LOW
   delayMicroseconds(marking_micros);  // 8.33 ms marking before response
   for (int unsigned i = 0; i < strlen(resp); i++) {
     writeChar(resp[i]);  // write each character
@@ -588,7 +723,8 @@ void SDI12::sendResponse(const char* resp) {
 
 void SDI12::sendResponse(FlashString resp) {
   setState(SDI12_TRANSMITTING);       // Get ready to send data to the recorder
-  digitalWrite(_dataPin, LOW);        // marking is LOW
+//  digitalWrite(_dataPin, LOW);        // marking is LOW
+  digitalWrite(_dataPinRX, HIGH);        // marking is LOW
   delayMicroseconds(marking_micros);  // 8.33 ms marking before response
   for (int unsigned i = 0; i < strlen_P((PGM_P)resp); i++) {
     // write each character
@@ -624,13 +760,15 @@ void SDI12::receiveISR() {
   // time of this data transition (plus ISR latency)
   sdi12timer_t thisBitTCNT = READTIME;
 
-  uint8_t pinLevel = digitalRead(_dataPin);  // current RX data level
+//  uint8_t pinLevel = digitalRead(_dataPin);  // current RX data level
+  uint8_t pinLevel = digitalRead(_dataPinRX);  // current RX data level
 
   // Check if we're ready for a start bit, and if this could possibly be it.
   if (rxState == WAITING_FOR_START_BIT) {
     // If we are waiting for a start bit and the pin is low it's not a start bit, exit
     // Inverse logic start bit = HIGH
-    if (pinLevel == LOW) { return; }
+    //if (pinLevel == LOW) { return; }
+    if (pinLevel == HIGH) { return; }
     // If the pin is HIGH, this should be a start bit.
     // Thus startChar(), which sets the rxState to 0, create an empty character, and a
     // new mask with a 1 in the lowest place
@@ -678,7 +816,8 @@ void SDI12::receiveISR() {
     rxState += bitsThisFrame;
 
     // Set all the bits received between the last change and this change
-    if (pinLevel == HIGH) {
+    //if (pinLevel == HIGH) {
+    if (pinLevel == LOW) {
       // If the current state is HIGH (and it just became so), then all bits between
       // the last change and now must have been LOW.
       // back fill previous bits with 1's (inverse logic - LOW = 1)
@@ -712,7 +851,8 @@ void SDI12::receiveISR() {
       // if this is LOW, or we haven't exceeded the number of bits in a
       // character (but have gotten all the data bits) then this should be a
       // stop bit and we can start looking for a new start bit.
-      if ((pinLevel == LOW) || !nextCharStarted) {
+      //if ((pinLevel == LOW) || !nextCharStarted) {
+      if ((pinLevel == HIGH) || !nextCharStarted) {
         rxState = WAITING_FOR_START_BIT;  // DISABLE STOP BIT TIMER
       } else {
         // If we just switched to HIGH, or we've exceeded the total number of
